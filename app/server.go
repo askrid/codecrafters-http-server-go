@@ -1,10 +1,18 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
-	"io"
 	"net"
 	"os"
+	"strings"
+)
+
+const (
+	crlf = "\r\n"
+
+	hdrOk       = "HTTP/1.1 200 OK"
+	hdrNotFound = "HTTP/1.1 404 Not Found"
 )
 
 func main() {
@@ -34,26 +42,44 @@ func main() {
 }
 
 func handle(conn net.Conn) {
-	recv := make([]byte, 4096)
-	
-	n, err := conn.Read(recv)
-	if err != nil && err != io.EOF {
-		fmt.Println("Failed to recieve: ", err)
+	s := bufio.NewScanner(conn)
+
+	// Read request line
+	if ok := s.Scan(); !ok {
+		fmt.Println("No request line")
+		return
+	}
+	if s.Err() != nil {
+		fmt.Println("Error reading request line: ", s.Err().Error())
 	}
 
-	if n > 0 {
-		// TODO
-	}
-
-	const (
-		crlf = "\r\n\r\n"
-		hdr  = "HTTP/1.1 200 OK" + crlf
-	)
-
-	_, err = conn.Write([]byte(hdr))
+	rline, err := parseRequestLine(s.Text())
 	if err != nil {
-		fmt.Println("Failed to write response: ", err)
+		fmt.Println("Error parsing request line: ", err.Error())
+	}
+	if rline.path != "/" {
+		conn.Write([]byte(hdrNotFound + crlf + crlf))
+		return
 	}
 
-	return
+	conn.Write([]byte(hdrOk + crlf + crlf))
+}
+
+type requestLine struct {
+	method  string
+	path    string
+	version string
+}
+
+func parseRequestLine(raw string) (requestLine, error) {
+	parts := strings.Split(raw, " ")
+	if len(parts) != 3 {
+		return requestLine{}, fmt.Errorf("invalid request line")
+	}
+
+	return requestLine{
+		method:  strings.ToUpper(parts[0]),
+		path:    parts[1],
+		version: strings.ToUpper(parts[2]),
+	}, nil
 }
