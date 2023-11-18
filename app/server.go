@@ -19,7 +19,7 @@ const (
 
 func main() {
 	s := &httpserver{
-		port:   4221,
+		port: 4221,
 	}
 	s.serve()
 
@@ -27,7 +27,7 @@ func main() {
 }
 
 type httpserver struct {
-	port   int
+	port int
 }
 
 func (h *httpserver) serve() {
@@ -56,7 +56,7 @@ func (h *httpserver) serve() {
 }
 
 type session struct {
-	conn   net.Conn
+	conn net.Conn
 }
 
 func (s *session) handle() {
@@ -171,7 +171,6 @@ func (s *session) send(resp *response) {
 
 	if bb != nil {
 		w.Write(bb)
-		w.WriteString(clrf)
 	}
 
 	w.Flush()
