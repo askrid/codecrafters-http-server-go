@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"log/slog"
 	"net"
 	"os"
 	"strconv"
@@ -19,11 +18,8 @@ const (
 )
 
 func main() {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-
 	s := &httpserver{
 		port:   4221,
-		logger: logger,
 	}
 	s.serve()
 
@@ -32,29 +28,28 @@ func main() {
 
 type httpserver struct {
 	port   int
-	logger *slog.Logger
 }
 
 func (h *httpserver) serve() {
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", strconv.Itoa(h.port)))
 	if err != nil {
-		h.logger.Error("failed to listen tcp", "port", h.port, "detail", err.Error())
+		fmt.Println("failed to listen tcp", "port", h.port, "detail", err.Error())
 		return
 	}
 	defer l.Close()
 
-	h.logger.Info("server listening", "port", h.port)
+	fmt.Println("server listening", "port", h.port)
 
 	for {
 		conn, err := l.Accept()
 		if err != nil {
-			h.logger.Error("error accepting connection", "detail", err.Error())
+			fmt.Println("error accepting connection", "detail", err.Error())
 			continue
 		}
 
 		go func(c net.Conn) {
 			defer c.Close()
-			s := &session{conn: c, logger: h.logger}
+			s := &session{conn: c}
 			s.handle()
 		}(conn)
 	}
@@ -62,7 +57,6 @@ func (h *httpserver) serve() {
 
 type session struct {
 	conn   net.Conn
-	logger *slog.Logger
 }
 
 func (s *session) handle() {
