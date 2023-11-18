@@ -9,12 +9,16 @@ import (
 	"strings"
 )
 
-type status int
-
 const (
-	httpOk         status = 200
-	httpBadRequest status = 400
-	httpNotFound   status = 404
+	httpOk         = 200
+	httpBadRequest = 400
+	httpNotFound   = 404
+
+	httpOption = "OPTION"
+	httpGet    = "GET"
+	httpPost   = "POST"
+	httpPut    = "PUT"
+	httpDelete = "DELETE"
 )
 
 func main() {
@@ -72,8 +76,11 @@ func (s *session) handle() {
 
 	// TODO: better routing
 	switch {
-	case req.path == "/":
-	case strings.HasPrefix(req.path, "/echo/"):
+	case req.method == httpGet && req.path == "/":
+	case req.method == httpGet && req.path == "/user-agent":
+		resp.headers["Content-Type"] = "text/plain"
+		resp.body = req.headers["User-Agent"]
+	case req.method == httpGet && strings.HasPrefix(req.path, "/echo/"):
 		resp.headers["Content-Type"] = "text/plain"
 		resp.body = strings.TrimPrefix(req.path, "/echo/")
 	default:
@@ -121,7 +128,9 @@ func (s *session) receive() (*request, error) {
 			}
 
 			// can override if header key is duplicated
-			req.headers[strings.ToLower(parts[0])] = strings.ToLower(parts[1])
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			req.headers[key] = val
 		} else {
 			// TODO: parse body
 			break
@@ -186,7 +195,7 @@ type request struct {
 }
 
 type response struct {
-	status  status
+	status  int
 	headers map[string]string
 	body    any
 }
