@@ -35,27 +35,22 @@ func main() {
 
 func handle(conn net.Conn) {
 	recv := make([]byte, 4096)
+	
+	n, err := conn.Read(recv)
+	if err != nil && err != io.EOF {
+		fmt.Println("Failed to recieve: ", err)
+	}
 
-	for {
-		n, err := conn.Read(recv)
-		if err != nil {
-			if err == io.EOF {
-				fmt.Println("Connection closed from client: ", conn.RemoteAddr().String())
-			} else {
-				fmt.Println("Failed to recieve: ", err)
-			}
-			break
-		}
-		if n > 0 {
-			// TODO
-		}
+	if n > 0 {
+		// TODO
 	}
 
 	const (
 		crlf = "\r\n\r\n"
 		hdr  = "HTTP/1.1 200 OK" + crlf
 	)
-	_, err := conn.Write([]byte(hdr))
+
+	_, err = conn.Write([]byte(hdr))
 	if err != nil {
 		fmt.Println("Failed to write response: ", err)
 	}
