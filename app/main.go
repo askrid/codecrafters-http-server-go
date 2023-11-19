@@ -7,16 +7,13 @@ import (
 
 func main() {
 	var (
-		directory string
+		fdir string
 	)
 
-	flag.StringVar(&directory, "directory", "", "Specify the directory path to get files")
+	flag.StringVar(&fdir, "directory", "", "Specify the directory path to get files")
 	flag.Parse()
 
-	server := &server{
-		port: 4221,
-		fdir: directory,
-	}
+	server := newServer(4221, fdir)
 
 	handler := &handler{
 		server: server,

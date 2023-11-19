@@ -2,24 +2,32 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"net"
-	"strconv"
+	"os"
 )
 
 type server struct {
 	port int
-	fdir string
+	ffs  fs.FS
 }
 
-func (h *server) serve(handler *handler) {
-	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", strconv.Itoa(h.port)))
+func newServer(port int, fdir string) *server {
+	return &server{
+		port: port,
+		ffs:  os.DirFS(fdir),
+	}
+}
+
+func (sv *server) serve(handler *handler) {
+	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", sv.port))
 	if err != nil {
-		fmt.Println("failed to listen tcp", "port", h.port, "detail", err.Error())
+		fmt.Println("failed to listen tcp", "port", sv.port, "detail", err.Error())
 		return
 	}
 	defer l.Close()
 
-	fmt.Println("server listening", "port", h.port)
+	fmt.Println("server listening", "port", sv.port)
 
 	for {
 		conn, err := l.Accept()

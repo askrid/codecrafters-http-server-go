@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"strconv"
 	"strings"
 )
 
@@ -87,14 +86,16 @@ func (s *session) readMeta() error {
 func (s *session) writeStatus(status int) {
 	s.resp.status = status
 	switch status {
-	default:
-		fallthrough
 	case httpOk:
 		s.netrw.WriteString("HTTP/1.1 200 OK")
 	case httpBadRequest:
 		s.netrw.WriteString("HTTP/1.1 400 Bad Requset")
 	case httpNotFound:
 		s.netrw.WriteString("HTTP/1.1 404 Not Found")
+	case httpMethodNotAllowed:
+		s.netrw.WriteString("HTTP/1.1 405 Method Not Allowed")
+	default:
+		s.netrw.WriteString(fmt.Sprintf("HTTP/1.1 %d", status))
 	}
 	s.netrw.WriteString(clrf)
 }
@@ -110,13 +111,16 @@ func (s *session) writeBodyString(str string) {
 		s.writeHeader("Content-Type", "text/plain")
 	}
 	if s.resp.headers["Content-Length"] == "" {
-		s.writeHeader("Content-Length", strconv.Itoa(len(str)))
+		s.writeHeader("Content-Length", fmt.Sprint(len(str)))
 	}
 	s.netrw.WriteString(clrf)
 	s.netrw.WriteString(str)
 }
 
 func (s *session) writeBodyReader(reader io.Reader) error {
+	if s.resp.headers["Content-Type"] == "" {
+		s.writeHeader("Content-Type", "application/octet-stream")
+	}
 	s.netrw.WriteString(clrf)
 
 	br := bufio.NewReader(reader)

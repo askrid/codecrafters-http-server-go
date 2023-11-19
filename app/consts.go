@@ -2,10 +2,11 @@ package main
 
 // HTTP status code
 const (
-	httpOk               = 200
-	httpBadRequest       = 400
-	httpNotFound         = 404
-	httpMethodNotAllowed = 405
+	httpOk                  = 200
+	httpBadRequest          = 400
+	httpNotFound            = 404
+	httpMethodNotAllowed    = 405
+	httpInternalServerError = 500
 )
 
 // HTTP method
