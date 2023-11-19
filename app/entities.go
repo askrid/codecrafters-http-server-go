@@ -1,21 +1,25 @@
 package main
 
-type request struct {
+type requestMeta struct {
 	method  string
 	path    string
-	http    string
+	httpver string
 	headers map[string]string
-	// body    any
 }
 
-type response struct {
+func newRequestMeta() *requestMeta {
+	return &requestMeta{
+		headers: make(map[string]string),
+	}
+}
+
+type responseMeta struct {
 	status  int
 	headers map[string]string
-	body    any
 }
 
-func newResponse() *response {
-	return &response{
+func newResponseMeta() *responseMeta {
+	return &responseMeta{
 		status:  httpOk,
 		headers: make(map[string]string),
 	}

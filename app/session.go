@@ -3,142 +3,139 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
 )
 
+// session is an individual HTTP session which is invoked for each incoming connection.
 type session struct {
-	server *httpserver
-	writer *bufio.Writer
-	reader *bufio.Reader
+	handler *handler
+	netrw   *bufio.ReadWriter
+	req     *requestMeta
+	resp    *responseMeta
 }
 
-func newSession(h *httpserver, conn net.Conn) *session {
+func newSession(conn net.Conn, handler *handler) *session {
 	return &session{
-		server: h,
-		writer: bufio.NewWriter(conn),
-		reader: bufio.NewReader(conn),
+		handler: handler,
+		netrw:   bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn)),
+		req:     newRequestMeta(),
+		resp:    newResponseMeta(),
 	}
 }
 
-func (s *session) handle() {
-	resp := newResponse()
-	defer s.send(resp)
+func (s *session) process() {
+	defer s.flush()
 
-	req, err := s.receive()
+	err := s.readMeta()
 	if err != nil {
-		resp.status = httpBadRequest
-		resp.body = fmt.Sprintf("failed to read request: %s", err.Error())
+		s.handler.badRequest(s, err)
 		return
 	}
 
-	// TODO: better routing
-	switch {
-	case req.method == httpGet && req.path == "/":
-	case req.method == httpGet && req.path == "/user-agent":
-		resp.headers["Content-Type"] = "text/plain"
-		resp.body = req.headers["User-Agent"]
-	case req.method == httpGet && strings.HasPrefix(req.path, "/echo/"):
-		resp.headers["Content-Type"] = "text/plain"
-		resp.body = strings.TrimPrefix(req.path, "/echo/")
-	case req.method == httpGet && strings.HasPrefix(req.path, "/files/"):
-		resp.headers["Content-Type"] = "application/octet-stream"
-	default:
-		resp.status = httpNotFound
-	}
+	s.handler.route(s)
 }
 
-func (s *session) receive() (*request, error) {
-	var req request
-	snr := bufio.NewScanner(s.reader)
+func (s *session) readMeta() error {
+	if s.req == nil {
+		return fmt.Errorf("request meta is nil")
+	}
 
+	scnr := bufio.NewScanner(s.netrw)
 	n := 0
-	body := false
-	for snr.Scan() {
-		if err := snr.Err(); err != nil {
-			return nil, fmt.Errorf("error reading line: %w", err)
+	for scnr.Scan() {
+		if err := scnr.Err(); err != nil {
+			return fmt.Errorf("error reading line: %w", err)
 		}
 
 		n++
-		line := snr.Text()
+		line := scnr.Text()
 
 		if n == 1 {
-			// parse request line
+			// parse start line
 			parts := strings.Split(line, " ")
 			if len(parts) != 3 {
-				return nil, fmt.Errorf("invalid request line: %s", line)
+				return fmt.Errorf("invalid start line: %s", line)
 			}
-
-			req.method = strings.ToUpper(parts[0])
-			req.path = parts[1]
-			req.http = strings.ToUpper(parts[2])
-			req.headers = make(map[string]string)
-		} else if !body {
+			s.req.method = strings.ToUpper(parts[0])
+			s.req.path = parts[1]
+			s.req.httpver = strings.ToUpper(parts[2])
+		} else {
 			// parse headers
 			if line == "" {
-				body = true
-				// TODO: continue to parse body
+				// break on the first empty line
+				// next Scan() will start reading body
 				break
 			}
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) != 2 {
-				return nil, fmt.Errorf("invalid header line: %s", line)
+				return fmt.Errorf("invalid header line: %s", line)
 			}
 
 			// can override if header key is duplicated
 			key := strings.TrimSpace(parts[0])
 			val := strings.TrimSpace(parts[1])
-			req.headers[key] = val
-		} else {
-			// TODO: parse body
-			break
+			s.req.headers[key] = val
 		}
 	}
 
-	if n == 0 {
-		return nil, fmt.Errorf("empty request")
-	}
-
-	return &req, nil
+	return nil
 }
 
-func (s *session) send(resp *response) {
-	var bb []byte
-	switch resp.body.(type) {
-	case string:
-		bb = []byte(resp.body.(string))
-	case []byte:
-		bb = resp.body.([]byte)
-	}
-
-	if bb != nil {
-		resp.headers["Content-Length"] = strconv.Itoa(len(bb))
-	}
-
-	const clrf = "\r\n"
-
-	switch resp.status {
+func (s *session) writeStatus(status int) {
+	s.resp.status = status
+	switch status {
 	default:
 		fallthrough
 	case httpOk:
-		s.writer.WriteString("HTTP/1.1 200 OK")
+		s.netrw.WriteString("HTTP/1.1 200 OK")
 	case httpBadRequest:
-		s.writer.WriteString("HTTP/1.1 400 Bad Requset")
+		s.netrw.WriteString("HTTP/1.1 400 Bad Requset")
 	case httpNotFound:
-		s.writer.WriteString("HTTP/1.1 404 Not Found")
+		s.netrw.WriteString("HTTP/1.1 404 Not Found")
 	}
-	s.writer.WriteString(clrf)
+	s.netrw.WriteString(clrf)
+}
 
-	for key, val := range resp.headers {
-		s.writer.WriteString(fmt.Sprintf("%s: %s%s", key, val, clrf))
+// NOTE: call this after calling writeStatus() once
+func (s *session) writeHeader(key, val string) {
+	s.resp.headers[key] = val
+	s.netrw.WriteString(fmt.Sprintf("%s: %s%s", key, val, clrf))
+}
+
+func (s *session) writeBodyString(str string) {
+	if s.resp.headers["Content-Type"] == "" {
+		s.writeHeader("Content-Type", "text/plain")
+	}
+	if s.resp.headers["Content-Length"] == "" {
+		s.writeHeader("Content-Length", strconv.Itoa(len(str)))
+	}
+	s.netrw.WriteString(clrf)
+	s.netrw.WriteString(str)
+}
+
+func (s *session) writeBodyReader(reader io.Reader) error {
+	s.netrw.WriteString(clrf)
+
+	br := bufio.NewReader(reader)
+	b := make([]byte, 4*1024)
+
+	for {
+		n, err := br.Read(b)
+		if err != nil {
+			if err != io.EOF {
+				return fmt.Errorf("failed to read: %w", err)
+			}
+			break
+		}
+		s.netrw.Write(b[:n])
 	}
 
-	s.writer.WriteString(clrf)
+	return nil
+}
 
-	if bb != nil {
-		s.writer.Write(bb)
-	}
-
-	s.writer.Flush()
+func (s *session) flush() {
+	s.netrw.Flush()
 }

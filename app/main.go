@@ -13,11 +13,15 @@ func main() {
 	flag.StringVar(&directory, "directory", "", "Specify the directory path to get files")
 	flag.Parse()
 
-	s := &httpserver{
+	server := &server{
 		port: 4221,
 		fdir: directory,
 	}
-	s.serve()
 
+	handler := &handler{
+		server: server,
+	}
+
+	server.serve(handler)
 	os.Exit(1)
 }

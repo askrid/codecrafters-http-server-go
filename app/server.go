@@ -6,12 +6,12 @@ import (
 	"strconv"
 )
 
-type httpserver struct {
+type server struct {
 	port int
 	fdir string
 }
 
-func (h *httpserver) serve() {
+func (h *server) serve(handler *handler) {
 	l, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%s", strconv.Itoa(h.port)))
 	if err != nil {
 		fmt.Println("failed to listen tcp", "port", h.port, "detail", err.Error())
@@ -30,8 +30,8 @@ func (h *httpserver) serve() {
 
 		go func() {
 			defer conn.Close()
-			s := newSession(h, conn)
-			s.handle()
+			s := newSession(conn, handler)
+			s.process()
 		}()
 	}
 }
