@@ -30,7 +30,7 @@ func (h *httpserver) serve() {
 
 		go func() {
 			defer conn.Close()
-			s := &session{server: h, conn: conn}
+			s := newSession(h, conn)
 			s.handle()
 		}()
 	}

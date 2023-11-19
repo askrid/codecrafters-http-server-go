@@ -7,7 +7,6 @@ const (
 	httpNotFound   = 404
 )
 
-
 // HTTP method
 const (
 	httpOption = "OPTION"

@@ -4,14 +4,22 @@ import (
 	"bufio"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"strings"
 )
 
 type session struct {
 	server *httpserver
-	conn   net.Conn
+	writer *bufio.Writer
+	reader *bufio.Reader
+}
+
+func newSession(h *httpserver, conn net.Conn) *session {
+	return &session{
+		server: h,
+		writer: bufio.NewWriter(conn),
+		reader: bufio.NewReader(conn),
+	}
 }
 
 func (s *session) handle() {
@@ -36,18 +44,14 @@ func (s *session) handle() {
 		resp.body = strings.TrimPrefix(req.path, "/echo/")
 	case req.method == httpGet && strings.HasPrefix(req.path, "/files/"):
 		resp.headers["Content-Type"] = "application/octet-stream"
-		filepath := s.server.fdir + "/" + strings.TrimPrefix(req.path, "/files/")
-		file, err := os.ReadFile(filepath)
 	default:
 		resp.status = httpNotFound
 	}
-
-	return
 }
 
 func (s *session) receive() (*request, error) {
 	var req request
-	snr := bufio.NewScanner(s.conn)
+	snr := bufio.NewScanner(s.reader)
 
 	n := 0
 	body := false
@@ -112,31 +116,29 @@ func (s *session) send(resp *response) {
 		resp.headers["Content-Length"] = strconv.Itoa(len(bb))
 	}
 
-	w := bufio.NewWriter(s.conn)
 	const clrf = "\r\n"
 
 	switch resp.status {
 	default:
 		fallthrough
 	case httpOk:
-		w.WriteString("HTTP/1.1 200 OK")
+		s.writer.WriteString("HTTP/1.1 200 OK")
 	case httpBadRequest:
-		w.WriteString("HTTP/1.1 400 Bad Requset")
+		s.writer.WriteString("HTTP/1.1 400 Bad Requset")
 	case httpNotFound:
-		w.WriteString("HTTP/1.1 404 Not Found")
+		s.writer.WriteString("HTTP/1.1 404 Not Found")
 	}
-	w.WriteString(clrf)
+	s.writer.WriteString(clrf)
 
 	for key, val := range resp.headers {
-		w.WriteString(fmt.Sprintf("%s: %s%s", key, val, clrf))
+		s.writer.WriteString(fmt.Sprintf("%s: %s%s", key, val, clrf))
 	}
 
-	w.WriteString(clrf)
+	s.writer.WriteString(clrf)
 
 	if bb != nil {
-		w.Write(bb)
+		s.writer.Write(bb)
 	}
 
-	w.Flush()
-	return
+	s.writer.Flush()
 }

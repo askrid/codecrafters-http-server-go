@@ -5,7 +5,7 @@ type request struct {
 	path    string
 	http    string
 	headers map[string]string
-	body    any
+	// body    any
 }
 
 type response struct {
