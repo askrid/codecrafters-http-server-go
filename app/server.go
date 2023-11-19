@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"fmt"
 	"net"
 	"os"
@@ -22,8 +23,13 @@ const (
 )
 
 func main() {
+	var directory string
+	flag.StringVar(&directory, "directory", "", "Specify the directory path to get files")
+	flag.Parse()
+
 	s := &httpserver{
 		port: 4221,
+		fdir: directory,
 	}
 	s.serve()
 
@@ -32,6 +38,7 @@ func main() {
 
 type httpserver struct {
 	port int
+	fdir string
 }
 
 func (h *httpserver) serve() {
@@ -51,16 +58,17 @@ func (h *httpserver) serve() {
 			continue
 		}
 
-		go func(c net.Conn) {
-			defer c.Close()
-			s := &session{conn: c}
+		go func() {
+			defer conn.Close()
+			s := &session{server: h, conn: conn}
 			s.handle()
-		}(conn)
+		}()
 	}
 }
 
 type session struct {
-	conn net.Conn
+	server *httpserver
+	conn   net.Conn
 }
 
 func (s *session) handle() {
@@ -83,6 +91,10 @@ func (s *session) handle() {
 	case req.method == httpGet && strings.HasPrefix(req.path, "/echo/"):
 		resp.headers["Content-Type"] = "text/plain"
 		resp.body = strings.TrimPrefix(req.path, "/echo/")
+	case req.method == httpGet && strings.HasPrefix(req.path, "/files/"):
+		resp.headers["Content-Type"] = "application/octet-stream"
+		filepath := s.server.fdir + "/" + strings.TrimPrefix(req.path, "/files/")
+		file, err := os.ReadFile(filepath)
 	default:
 		resp.status = httpNotFound
 	}
