@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"strings"
 )
 
+// handler has business logic
 type handler struct {
 	server *server
 }
@@ -42,6 +44,8 @@ func (h *handler) route(s *session) {
 		switch s.req.method {
 		case httpGet:
 			h.getFile(s)
+		case httpPost:
+			h.postFile(s)
 		default:
 			h.methodNotAllowed(s)
 		}
@@ -75,13 +79,12 @@ func (h *handler) userAgent(s *session) {
 
 func (h *handler) getFile(s *session) {
 	path := strings.TrimPrefix(s.req.path, "/files/")
-	f, err := h.server.ffs.Open(path)
+	f, err := h.server.fopen(path)
 	if err != nil {
-		pathErr := new(fs.PathError)
-		if errors.As(err, &pathErr) {
+		if errors.Is(err, fs.ErrNotExist) {
 			h.notFound(s)
 		} else {
-			h.internalServerError(s)
+			h.internalServerError(s, err)
 		}
 		return
 	}
@@ -89,18 +92,46 @@ func (h *handler) getFile(s *session) {
 
 	info, err := f.Stat()
 	if err != nil {
-		h.internalServerError(s)
+		h.internalServerError(s, err)
 	}
 
 	s.writeStatus(httpOk)
 	s.writeHeader("Content-Type", "application/octet-stream")
 	s.writeHeader("Content-Length", fmt.Sprint(info.Size()))
-	s.writeBodyReader(f)
+	s.writeBodyFromReader(f)
+}
+
+func (h *handler) postFile(s *session) {
+	path := strings.TrimPrefix(s.req.path, "/files/")
+	f, err := h.server.fcreate(path)
+	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			h.permissionDenied(s)
+		} else {
+			h.internalServerError(s, err)
+		}
+		return
+	}
+	defer f.Close()
+
+	fmt.Println("body", string(s.req.body))
+	_, err = f.Write(s.req.body)
+	if err != nil {
+		h.internalServerError(s, err)
+	}
+
+	s.writeStatus(httpCreated)
+	s.writeBodyEmpty()
 }
 
 func (h *handler) badRequest(s *session, err error) {
 	s.writeStatus(httpBadRequest)
 	s.writeBodyString(err.Error())
+}
+
+func (h *handler) permissionDenied(s *session) {
+	s.writeStatus(httpPermissionDenied)
+	s.writeBodyString("permission denied")
 }
 
 func (h *handler) notFound(s *session) {
@@ -113,7 +144,8 @@ func (h *handler) methodNotAllowed(s *session) {
 	s.writeBodyString(fmt.Sprintf("%s not allowed", s.req.method))
 }
 
-func (h *handler) internalServerError(s *session) {
+func (h *handler) internalServerError(s *session, err error) {
+	fmt.Println("internal server error", "detail", err.Error())
 	s.writeStatus(httpInternalServerError)
 	s.writeBodyString("internal server error")
 }

@@ -3,7 +3,9 @@ package main
 // HTTP status code
 const (
 	httpOk                  = 200
+	httpCreated             = 201
 	httpBadRequest          = 400
+	httpPermissionDenied    = 403
 	httpNotFound            = 404
 	httpMethodNotAllowed    = 405
 	httpInternalServerError = 500

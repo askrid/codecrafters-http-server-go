@@ -3,17 +3,12 @@ package main
 import (
 	"flag"
 	"os"
+	"strings"
 )
 
 func main() {
-	var (
-		fdir string
-	)
-
-	flag.StringVar(&fdir, "directory", "", "Specify the directory path to get files")
-	flag.Parse()
-
-	server := newServer(4221, fdir)
+	cfg := parseFlags()
+	server := newServer(cfg)
 
 	handler := &handler{
 		server: server,
@@ -21,4 +16,19 @@ func main() {
 
 	server.serve(handler)
 	os.Exit(1)
+}
+
+func parseFlags() *config {
+	cfg := &config{}
+
+	flag.IntVar(&cfg.port, "port", 4221, "Server port to listen on")
+	flag.StringVar(&cfg.fdir, "directory", "", "Specify the directory path to get files")
+
+	flag.Parse()
+
+	if !strings.HasSuffix(cfg.fdir, "/") {
+		cfg.fdir += "/"
+	}
+
+	return cfg
 }
