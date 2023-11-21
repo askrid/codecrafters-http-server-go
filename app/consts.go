@@ -1,5 +1,8 @@
 package main
 
+// HTTP version
+const httpVer = "HTTP/1.1"
+
 // HTTP status code
 const (
 	httpOk                  = 200
@@ -10,6 +13,17 @@ const (
 	httpMethodNotAllowed    = 405
 	httpInternalServerError = 500
 )
+
+// HTTP status messages
+var httpStatusMessages = map[int]string{
+	httpOk:                  "OK",
+	httpCreated:             "Created",
+	httpBadRequest:          "Bad Request",
+	httpPermissionDenied:    "Permission Denied",
+	httpNotFound:            "Not Found",
+	httpMethodNotAllowed:    "Method Not Allowed",
+	httpInternalServerError: "Internal Server Error",
+}
 
 // HTTP method
 const (

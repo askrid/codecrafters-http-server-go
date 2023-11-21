@@ -12,7 +12,6 @@ import (
 // session is a processor for individual HTTP request
 type session struct {
 	handler *handler
-	conn    net.Conn
 	buf     *bufio.ReadWriter
 	req     *request
 	resp    *responseMeta
@@ -21,7 +20,6 @@ type session struct {
 func newSession(conn net.Conn, handler *handler) *session {
 	return &session{
 		handler: handler,
-		conn:    conn,
 		buf:     bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn)),
 		req:     newRequest(),
 		resp:    newResponseMeta(),
@@ -36,9 +34,6 @@ func (s *session) process() {
 			return err
 		}
 		if err := s.readHeaders(); err != nil {
-			return err
-		}
-		if err := s.readBody(); err != nil {
 			return err
 		}
 		return nil
@@ -73,7 +68,7 @@ func (s *session) readHeaders() error {
 		}
 		if line == "" || line == clrf {
 			// end of headers
-			return nil
+			break
 		}
 		parts := strings.SplitN(line, ":", 2)
 		if len(parts) != 2 {
@@ -83,36 +78,33 @@ func (s *session) readHeaders() error {
 		val := strings.TrimSpace(parts[1])
 		s.req.headers[key] = val
 	}
+
+	return nil
 }
 
-func (s *session) readBody() error {
-	bodyTotal, _ := strconv.Atoi(s.req.headers["Content-Length"])
-	if bodyTotal == 0 {
-		return nil
+func (s *session) readBodyToWriter(w io.Writer) error {
+	unread, _ := strconv.Atoi(s.req.headers["Content-Length"])
+	b := make([]byte, 4*1024)
+
+	for unread > 0 {
+		n, err := s.buf.Read(b)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return fmt.Errorf("error reading body: %w", err)
+		}
+		unread -= n
+		w.Write(b[:n])
 	}
-	s.req.body = make([]byte, bodyTotal)
-	_, err := s.conn.Read(s.req.body)
-	if err != nil {
-		return fmt.Errorf("error reading body: %w", err)
-	}
+
 	return nil
 }
 
 func (s *session) writeStatus(status int) {
 	s.resp.status = status
-	switch status {
-	case httpOk:
-		s.buf.WriteString("HTTP/1.1 200 OK")
-	case httpBadRequest:
-		s.buf.WriteString("HTTP/1.1 400 Bad Requset")
-	case httpNotFound:
-		s.buf.WriteString("HTTP/1.1 404 Not Found")
-	case httpMethodNotAllowed:
-		s.buf.WriteString("HTTP/1.1 405 Method Not Allowed")
-	default:
-		s.buf.WriteString(fmt.Sprintf("HTTP/1.1 %d", status))
-	}
-	s.buf.WriteString(clrf)
+	msg := fmt.Sprintf("%s %d %s%s", httpVer, status, httpStatusMessages[status], clrf)
+	s.buf.WriteString(msg)
 }
 
 // NOTE: call this after calling writeStatus() once
@@ -136,17 +128,16 @@ func (s *session) writeBodyString(str string) {
 	s.buf.WriteString(str)
 }
 
-func (s *session) writeBodyFromReader(reader io.Reader) error {
+func (s *session) writeBodyFromReader(r io.Reader) error {
 	if s.resp.headers["Content-Type"] == "" {
 		s.writeHeader("Content-Type", "application/octet-stream")
 	}
 	s.buf.WriteString(clrf)
 
-	br := bufio.NewReader(reader)
 	b := make([]byte, 4*1024)
 
 	for {
-		n, err := br.Read(b)
+		n, err := r.Read(b)
 		if err != nil {
 			if err != io.EOF {
 				return fmt.Errorf("failed to read: %w", err)

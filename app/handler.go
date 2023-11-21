@@ -114,8 +114,7 @@ func (h *handler) postFile(s *session) {
 	}
 	defer f.Close()
 
-	fmt.Println("body", string(s.req.body))
-	_, err = f.Write(s.req.body)
+	err = s.readBodyToWriter(f)
 	if err != nil {
 		h.internalServerError(s, err)
 	}
