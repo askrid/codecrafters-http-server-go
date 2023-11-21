@@ -34,8 +34,4 @@ func parseFlags(cfg *config) {
 	flag.StringVar(&cfg.fdir, "directory", "", "Specify the directory path to get files")
 
 	flag.Parse()
-
-	if !strings.HasSuffix(cfg.fdir, "/") {
-		cfg.fdir += "/"
-	}
 }
