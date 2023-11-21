@@ -1,14 +1,14 @@
 package main
 
-type request struct {
+type requestMeta struct {
 	method  string
 	path    string
 	httpver string
 	headers map[string]string
 }
 
-func newRequest() *request {
-	return &request{
+func newRequest() *requestMeta {
+	return &requestMeta{
 		headers: make(map[string]string),
 	}
 }

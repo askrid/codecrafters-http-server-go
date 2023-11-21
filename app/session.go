@@ -13,7 +13,7 @@ import (
 type session struct {
 	handler *handler
 	netio   *bufio.ReadWriter
-	req     *request
+	req     *requestMeta
 	resp    *responseMeta
 }
 
