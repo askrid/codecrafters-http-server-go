@@ -6,14 +6,16 @@ import (
 	"io/fs"
 	"os"
 	"strings"
+
+	"github.com/codecrafters-io/http-server-starter-go/internal/localfs"
 )
 
 // handler has business logic
 type handler struct {
-	server *server
+	fs localfs.LocalFS
 }
 
-// TODO: better routing
+// TODO: better routing like httprouter
 func (h *handler) route(s *session) {
 	switch {
 	case s.req.path == "/":
@@ -79,7 +81,7 @@ func (h *handler) userAgent(s *session) {
 
 func (h *handler) getFile(s *session) {
 	path := strings.TrimPrefix(s.req.path, "/files/")
-	f, err := h.server.fopen(path)
+	f, err := h.fs.Open(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			h.notFound(s)
@@ -103,7 +105,7 @@ func (h *handler) getFile(s *session) {
 
 func (h *handler) postFile(s *session) {
 	path := strings.TrimPrefix(s.req.path, "/files/")
-	f, err := h.server.fcreate(path)
+	f, err := h.fs.Create(path)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
 			h.permissionDenied(s)

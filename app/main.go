@@ -4,23 +4,32 @@ import (
 	"flag"
 	"os"
 	"strings"
+
+	"github.com/codecrafters-io/http-server-starter-go/internal/localfs"
 )
 
 func main() {
-	cfg := parseFlags()
-	server := newServer(cfg)
+	cfg := &config{}
+	parseFlags(cfg)
 
-	handler := &handler{
-		server: server,
+	sv := &server{
+		port: cfg.port,
 	}
 
-	server.serve(handler)
+	hdlr := &handler{
+		fs: localfs.NewLocalFS(cfg.fdir),
+	}
+
+	sv.serve(hdlr)
 	os.Exit(1)
 }
 
-func parseFlags() *config {
-	cfg := &config{}
+type config struct {
+	port int
+	fdir string
+}
 
+func parseFlags(cfg *config) {
 	flag.IntVar(&cfg.port, "port", 4221, "Server port to listen on")
 	flag.StringVar(&cfg.fdir, "directory", "", "Specify the directory path to get files")
 
@@ -29,6 +38,4 @@ func parseFlags() *config {
 	if !strings.HasSuffix(cfg.fdir, "/") {
 		cfg.fdir += "/"
 	}
-
-	return cfg
 }

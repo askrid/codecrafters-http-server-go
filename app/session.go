@@ -9,10 +9,10 @@ import (
 	"strings"
 )
 
-// session is a processor for individual HTTP request
+// session processes individual HTTP request
 type session struct {
 	handler *handler
-	buf     *bufio.ReadWriter
+	netio   *bufio.ReadWriter
 	req     *request
 	resp    *responseMeta
 }
@@ -20,7 +20,7 @@ type session struct {
 func newSession(conn net.Conn, handler *handler) *session {
 	return &session{
 		handler: handler,
-		buf:     bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn)),
+		netio:   bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn)),
 		req:     newRequest(),
 		resp:    newResponseMeta(),
 	}
@@ -46,7 +46,7 @@ func (s *session) process() {
 }
 
 func (s *session) readStartLine() error {
-	line, err := s.buf.ReadString('\n')
+	line, err := s.netio.ReadString('\n')
 	if err != nil {
 		return fmt.Errorf("error reading start line: %w", err)
 	}
@@ -62,7 +62,7 @@ func (s *session) readStartLine() error {
 
 func (s *session) readHeaders() error {
 	for {
-		line, err := s.buf.ReadString('\n')
+		line, err := s.netio.ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("error reading header line: %w", err)
 		}
@@ -86,8 +86,9 @@ func (s *session) readBodyToWriter(w io.Writer) error {
 	unread, _ := strconv.Atoi(s.req.headers["Content-Length"])
 	b := make([]byte, 4*1024)
 
+	// TODO: timeout
 	for unread > 0 {
-		n, err := s.buf.Read(b)
+		n, err := s.netio.Read(b)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -101,20 +102,20 @@ func (s *session) readBodyToWriter(w io.Writer) error {
 	return nil
 }
 
+// NOTE: call this first when writing response
 func (s *session) writeStatus(status int) {
 	s.resp.status = status
 	msg := fmt.Sprintf("%s %d %s%s", httpVer, status, httpStatusMessages[status], clrf)
-	s.buf.WriteString(msg)
+	s.netio.WriteString(msg)
 }
 
-// NOTE: call this after calling writeStatus() once
 func (s *session) writeHeader(key, val string) {
 	s.resp.headers[key] = val
-	s.buf.WriteString(fmt.Sprintf("%s: %s%s", key, val, clrf))
+	s.netio.WriteString(fmt.Sprintf("%s: %s%s", key, val, clrf))
 }
 
 func (s *session) writeBodyEmpty() {
-	s.buf.WriteString(clrf)
+	s.netio.WriteString(clrf)
 }
 
 func (s *session) writeBodyString(str string) {
@@ -124,15 +125,15 @@ func (s *session) writeBodyString(str string) {
 	if s.resp.headers["Content-Length"] == "" {
 		s.writeHeader("Content-Length", fmt.Sprint(len(str)))
 	}
-	s.buf.WriteString(clrf)
-	s.buf.WriteString(str)
+	s.netio.WriteString(clrf)
+	s.netio.WriteString(str)
 }
 
 func (s *session) writeBodyFromReader(r io.Reader) error {
 	if s.resp.headers["Content-Type"] == "" {
 		s.writeHeader("Content-Type", "application/octet-stream")
 	}
-	s.buf.WriteString(clrf)
+	s.netio.WriteString(clrf)
 
 	b := make([]byte, 4*1024)
 
@@ -144,12 +145,13 @@ func (s *session) writeBodyFromReader(r io.Reader) error {
 			}
 			break
 		}
-		s.buf.Write(b[:n])
+		s.netio.Write(b[:n])
 	}
 
 	return nil
 }
 
+// NOTE: call this last when writing response since we use bufio
 func (s *session) flush() {
-	s.buf.Flush()
+	s.netio.Flush()
 }
